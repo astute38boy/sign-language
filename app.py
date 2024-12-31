@@ -2,7 +2,7 @@ from flask import Flask, render_template, jsonify, request, Response
 import cv2
 import numpy as np
 import mediapipe as mp
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model # type: ignore
 import base64
 from io import BytesIO
 from PIL import Image
@@ -62,12 +62,11 @@ def generate_frames():
                 predicted_action = actions[np.argmax(res)]
                 confidence = np.max(res)
 
-                if confidence >= confidence_threshold:
-                    cv2.putText(image, f'{predicted_action} ({confidence:.2f})', (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-                else:
-                    cv2.putText(image, 'Uncertain', (10, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+                text = f'{predicted_action} ({confidence:.2f})' if confidence >= confidence_threshold else 'Uncertain'
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2, 10)[0]
+                text_x = (image.shape[1] - text_size[0]) // 2
+                text_y = 70  # Adding padding on top
+                cv2.putText(image, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 128, 0) if confidence >= confidence_threshold else (0, 0, 255), 10, cv2.LINE_AA)
 
             # Encode the frame as JPEG
             ret, buffer = cv2.imencode('.jpg', image)

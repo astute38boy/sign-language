@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Medical Record - Thomson Hospital</title>
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.11.1/core.css">
+    
     <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
     <style>
         /* General Styles */
@@ -145,20 +145,48 @@
             margin: 20px 0;
         }
 
-        .live-translation h4 {
-            font-size: 30px;
+        /* Move the live translation above the webcam feed */
+        .live-translation-text {
+            font-size: 28px;
             font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        .live-translation p {
-            font-size: 20px;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
         }
 
         .loading {
             font-style: italic;
             color: gray;
+        }
+
+        /* Webcam feed styling to prevent stretching */
+        .webcam-feed {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .webcam-image {
+            width: 100%; /* Adjust width to fit the container */
+            max-width: 500px; /* Ensure webcam feed does not exceed a maximum width */
+            height: auto; /* Maintain aspect ratio */
+            object-fit: contain; /* Prevent stretching */
+            border-radius: 10px; /* Optional: Adds rounded corners */
+        }
+
+        /* Larger Font for Live Translation Text */
+        #live-translation {
+            font-size: 40px; /* Increase the font size of the whole text */
+            font-weight: bold; /* Make it bold */
+            font-family: 'Arial', sans-serif; /* Specify the font family */
+            color: #2d295c; /* Change the text color to match your theme */
+            text-align: center; /* Center align the text */
+            margin-bottom: 20px; /* Add some margin below it */
+        }
+
+        .confidence {
+            font-size: 40px; /* Increase font size of the confidence value */
+            font-weight: bold; /* Make confidence text bold */
+            color: #ff5722; /* Optional: Change the color of the confidence value */
         }
 
         @media (max-width: 768px) {
@@ -228,8 +256,8 @@
 
     <!-- Live Translation and Webcam Feed -->
     <section class="live-translation">
-        <h4>Live Translation:</h4>
-        <p id="live-translation" aria-live="polite">Initializing...</p>
+        <!-- Moved the live translation text outside the camera module and made it larger -->
+        <div class="live-translation-text" id="live-translation" aria-live="polite">Initializing...</div>
         <div class="webcam-feed">
             <h4>Webcam Feed:</h4>
             <img src="/video_feed" alt="Live Webcam Feed" class="webcam-image">
@@ -242,7 +270,8 @@
                 .then(response => response.json())
                 .then(data => {
                     // Update live translation text with action and confidence
-                    document.getElementById('live-translation').innerText = data.action + " (" + data.confidence + ")";
+                    const liveTranslationElement = document.getElementById('live-translation');
+                    liveTranslationElement.innerHTML = `${data.action} (<span class='confidence'>${data.confidence}</span>)`;
                 })
                 .catch(error => console.error('Error:', error));
         }
