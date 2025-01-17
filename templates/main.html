@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Medical Record - Thomson Hospital</title>
-    
+
     <script type="module" src="https://pyscript.net/releases/2024.11.1/core.js"></script>
     <style>
         /* General Styles */
@@ -210,7 +210,7 @@
             <h2>THOMSON HOSPITAL</h2>
         </div>
         <div class="logo">
-            <img src="../static/logo.jpg" alt="Thomson Hospital Logo" class="header-logo-image" role="img">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Thomson Hospital Logo" class="header-logo-image" role="img">
         </div>
     </div>
 </header>
@@ -219,7 +219,7 @@
     <!-- Left Column: Patient Profile -->
     <section class="patient-profile">
         <div class="profile-picture">
-            <img src="../static/pfp.jpg" alt="Patient Profile Picture" class="patient-profile-photo">
+            <img src="{{ url_for('static', filename='pfp.jpg') }}" alt="Patient Profile Picture" class="patient-profile-photo">
         </div>
         <div class="patient-profile-details">
             <h3><strong>PATIENT'S NAME</strong></h3>
@@ -260,25 +260,87 @@
         <div class="live-translation-text" id="live-translation" aria-live="polite">Initializing...</div>
         <div class="webcam-feed">
             <h4>Webcam Feed:</h4>
-            <img src="/video_feed" alt="Live Webcam Feed" class="webcam-image">
-        </div>
-    </section>
 
+        </div>
+
+        <div>
+            <h2 id="prediction">Waiting for prediction...</h2>
+            <button id="yes" style="display: none;">Yes</button>
+            <button id="no" style="display: none;">No</button>
+        </div>
+        <img src="/video_feed" alt="Live Webcam Feed" class="webcam-image">
+
+    </section>
     <script>
-        function fetchPrediction() {
-            fetch('/predict', { method: 'POST' })
+
+        const predictionDiv = document.getElementById('prediction');
+        const yesButton = document.getElementById('yes');
+        const noButton = document.getElementById('no');
+        const videoFeed = document.querySelector('img'); // The video stream image
+        let polling = true; // To control polling
+
+        // Poll the server for predictions
+        function pollPredictions() {
+            if (!polling) return;
+
+            fetch('/get_prediction')
                 .then(response => response.json())
                 .then(data => {
-                    // Update live translation text with action and confidence
-                    const liveTranslationElement = document.getElementById('live-translation');
-                    liveTranslationElement.innerHTML = `${data.action} (<span class='confidence'>${data.confidence}</span>)`;
-                })
-                .catch(error => console.error('Error:', error));
+                    if (data.message) {
+                        predictionDiv.innerText = data.message;
+                    }
+
+                    if (data.action) {
+                        yesButton.style.display = 'inline-block';
+                        noButton.style.display = 'inline-block';
+                    } else {
+                        yesButton.style.display = 'none';
+                        noButton.style.display = 'none';
+                    }
+
+                    if (data.message.includes("Prediction process completed")) {
+                        polling = false; // Stop polling
+                        videoFeed.style.display = 'none'; // Hide video feed
+                    }
+                });
         }
 
-        // Call fetchPrediction periodically
-        setInterval(fetchPrediction, 1000); // Update translation every second
+        setInterval(pollPredictions, 3000);
+
+        // Handle Yes/No button clicks
+        yesButton.addEventListener('click', () => {
+            fetch('/confirm_response', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ response: 'yes' })
+            }).then(response => response.json())
+                .then(data => {
+                    if (data.status === 'confirmed') {
+                        predictionDiv.innerText = data.message; // Display the confirmed disease
+                        yesButton.style.display = 'none';
+                        noButton.style.display = 'none';
+                        polling = false; // Stop polling
+                        videoFeed.style.display = 'none'; // Hide video feed
+                    }
+                });
+        });
+
+        noButton.addEventListener('click', () => {
+            fetch('/confirm_response', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ response: 'no' })
+            }).then(response => response.json())
+                .then(data => alert(data.message));
+        });
+
     </script>
+
+
 
 </body>
 

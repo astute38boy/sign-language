@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, Response
+from flask import Flask, render_template, jsonify, request, Response, redirect, url_for
 import cv2
 import numpy as np
 import mediapipe as mp
@@ -23,6 +23,9 @@ sequence_length = 30
 sequence = []
 predicted_action = None
 confidence = 0
+video_running = True
+prediction_confirmed = False
+
 
 # Extract keypoints from landmarks
 def extract_keypoints(results):
@@ -32,17 +35,40 @@ def extract_keypoints(results):
     rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(21*3)
     return np.concatenate([pose, face, lh, rh])
 
-# Route to serve the main HTML page
-@app.route('/')
-def index():
+# Route to serve the sign-in page
+@app.route('/', methods=['GET', 'POST'])
+def sign_in():
+    if request.method == 'POST':
+        # Get username and password from the form
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        # Simple authentication logic (replace with actual authentication)
+        if username == 'admin' and password == 'password':  # Replace with your authentication logic
+            return redirect(url_for('main'))  # Redirect to the main page on successful login
+        else:
+            error = 'Invalid username or password. Please try again.'
+            return render_template('sign-in.html', error=error)
+    return render_template('sign-in.html')
+
+@app.route('/main', methods=['GET', 'POST'])
+def main():
+    # Handle POST request logic if needed (e.g., authentication checks)
     return render_template('main.html')
 
 # Route to handle the webcam feed
+# Global variable to store the patient's response
+patient_response = None  # None, 'yes', or 'no'
+
 def generate_frames():
+    global sequence, predicted_action, confidence, video_running
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Could not open webcam.")
+        return
+
     with mp_holistic.Holistic(min_detection_confidence=0.5, min_tracking_confidence=0.5) as holistic:
-        global sequence, predicted_action, confidence
-        while True:
+        while video_running:  # Only run while video_running is True
             ret, frame = cap.read()
             if not ret:
                 break
@@ -62,21 +88,68 @@ def generate_frames():
                 predicted_action = actions[np.argmax(res)]
                 confidence = np.max(res)
 
+            # Add prediction text to the video frame
+            if predicted_action:
                 text = f'{predicted_action} ({confidence:.2f})' if confidence >= confidence_threshold else 'Uncertain'
-                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2, 10)[0]
-                text_x = (image.shape[1] - text_size[0]) // 2
-                text_y = 70  # Adding padding on top
-                cv2.putText(image, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 128, 0) if confidence >= confidence_threshold else (0, 0, 255), 10, cv2.LINE_AA)
+                cv2.putText(image, text, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                            (0, 255, 0) if confidence >= confidence_threshold else (0, 0, 255), 2, cv2.LINE_AA)
 
             # Encode the frame as JPEG
             ret, buffer = cv2.imencode('.jpg', image)
             frame = buffer.tobytes()
 
-            # Send both the video frame and prediction as response
+            # Yield the frame as part of the video feed
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
     cap.release()
+
+
+@app.route('/get_prediction', methods=['GET'])
+def get_prediction():
+    global predicted_action, confidence, prediction_confirmed
+
+    if prediction_confirmed:
+        return jsonify({'action': None, 'message': "Prediction process completed. No further predictions."})
+
+    if predicted_action and confidence >= confidence_threshold:
+        return jsonify({'action': predicted_action, 'message': f"Predicted disease: {predicted_action}. Is this correct?"})
+    else:
+        return jsonify({'action': None, 'message': "Waiting for a confident prediction..."})
+
+
+@app.route('/confirm_response', methods=['POST'])
+def confirm_response():
+    global sequence, predicted_action, video_running, prediction_confirmed
+    data = request.json
+    patient_response = data.get('response')
+
+    if patient_response == 'yes':
+        # Patient confirms the prediction
+        video_running = False  # Stop video capture if the predicted disease is correct
+        prediction_confirmed = True  # Mark prediction as confirmed
+        response = {
+            'status': 'confirmed',
+            'message': f"The disease is confirmed as {predicted_action}.",
+            'disease': predicted_action
+        }
+    elif patient_response == 'no':
+        # Patient rejects the prediction, reset the sequence
+        sequence = []
+        response = {
+            'status': 'rejected',
+            'message': "Prediction rejected. Please try again."
+        }
+    else:
+        response = {
+            'status': 'error',
+            'message': "Invalid response. Please respond with 'yes' or 'no'."
+        }
+
+    return jsonify(response)
+
+
+
 
 @app.route('/video_feed')
 def video_feed():
